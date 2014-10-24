@@ -1,0 +1,10 @@
+intro to schema design:
+  - to embed or not to embed, that is the question
+  - document oriented scheme (straightforward with relational)
+    - posts collection had a tags array embedded (which could be duplicated between posts)
+    - accessed at the same time you access the post, not independently.
+  - when deciding to embed, the way you access the data that decides
+  - a mongodb document cant be larger than 16MB
+
+Homework hw1-1-mongorestore
+  - 
