@@ -1,0 +1,65 @@
+Using the $set Command
+	db.people.update() requires us to 'repeat' all information currently in the document or lose it
+	db.people.update({name:"Alice"}, {$set:{age:30}}) -- this $set operation leaves other key:value pairs intact
+	$inc will add to the existing value
+
+Using the $unset command:
+	db.people.update({name:"Jones"},{$unset: {"profession": 1}})
+	value of the unset key is irrelevant/arbitrary (mongoDB will ignore it, but JSON formatting requires it)
+	
+Using $push, $pop, $pull, $pullAll, $pushAll, $addToSet
+	$push - add elment to array (rightmore (new) position)
+	$pop  - remove rightmost element from the array
+				{ $pop : { "a" : 1 } }  -- pop rightmost element
+				{ $pop : { "a" : -1 } } -- pop leftmost element
+	$pushAll -- adds given array of elements to the array we are manipulating
+				{ $pushAll : { "a" : [ 7, 8, 9 ] } } 
+	$pull -- removes value from the array no matter what it's position is
+	$pullAll  --  removes any occurrance of the given array's values from the array
+				{ $pullAll : { "a" : [ 7, 8, 9 ] } } 
+	$addToSet -- if item already exists in the array, it does nothing, otherwise it acts as a $push
+	
+	
+Upserts:
+	update operations that do not produce a match do nothing
+	what if we wanted to update an existing document but if it doesnt exist, create a new one?
+		db.people.update( { name : "george" }, { $set : { age : 40 } }, { upsert : true } );
+	MDB has to leave out fields without a concrete value (i.e. $gt: {age:50})
+	
+Multi-update:
+	db.people.update( {  }, { $set : { title : "Dr" } }, { multi : true } );
+	   -- the default update behavior will only update the first matched item
+	   -- { multi : true } will update all documents that match
+	-- multi-update operations can pause (yield) to allow other write operations to work while a large write (update) operaion occurs
+	-- individual write operation is always atomic and will not allow concurrent read/write (no other operation will see a partially update item)
+	
+
+Removing Data:
+	db.<collection>.remove( { } ) -- removes all documents
+	db.<collection>.remove( { "name":"alice" } )  -- removes matching document(s)
+	db.<collection>.drop() -- drop collection -- implementation variation:
+			remove() requires individual removals -- keeps indexes
+			drop removes much larger data structures -- completely removes all indeces
+		remove() can affect multiple documents -- not atomic (similar to multi-update)	
+	*no need to use multi with remove() - by default it always operates on 'all' matched records
+	
+	
+getLastError (prior to MongoDB 2.6)
+	the 2.6 shell includes much more verbose outputs to let us know the results of successful writes
+	
+
+Node.js Driver (+ CRUD): find, findOne and cursors
+		mongo --BSON--> mongod <--BSON-- ((driver) nodejs)
+	import data into mongo from a file:
+		mongoimport -d <db-name> -c <collection-name> <file-name>.json
+	
+		
+Node: Cursor
+	-- query not performed until documents is needed
+	Cursor --(not called until .each or .toArray is called)--> mongod
+	-- response from mongod is not necessarily the entire result set
+		-- mongod returns a batch of documents up to a certain batch size
+			-- when batch runs out, cursor makes another request for a new batch - cursor manages these requests for us
+			-- with .toArray the callback isn't called until all data is returned
+			-- with .each the callback is called for each individual document - takes advantage of the batching mongod and the cursor are doing for us
+	
