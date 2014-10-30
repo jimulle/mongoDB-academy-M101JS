@@ -8,7 +8,7 @@ MongoClient.connect('mongodb://localhost:27017/course', function(err, db) {
     var cursor = db.collection('grades').find(query);
 	//the above is a synchronous action - query isnt performed until we need some documents back
 
-	//.each() takes a callback and loop through the entire cursor
+	//.each() takes a callback and call it for each document returned
     cursor.each(function(err, doc) {
         if(err) throw err;
 
