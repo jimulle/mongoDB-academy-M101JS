@@ -1,0 +1,134 @@
+CRUD and the Mongo Shell
+ :terminology  --  :Mongo   --  :SQL
+  Create       --   Insert  --   Insert
+  Read         --   Find    --   Select
+  Update       --   Update  --   Update
+  Delete       --   Remove  --   Delete
+
+  MDB's CRUD operations exist as methods/functions in programming language APIs, not as a seperate language
+
+  this week learning:
+    MDBs basic document creation, retrieval, modification and removal operations
+    some features of the MongoDB shell, mongo
+    how to manipulate mdb documents from a language
+
+
+The Mongo Shell
+  interactive javascript interpreter
+  shell > mongo
+    prints mongo shell version and the name of the database
+  can key in fragments of javascript and have them interested immediately
+  up arrow -- previous line of input
+  ctrl + A -- move to beginning of the line
+  help -- list of help topics
+  help keys -- key bindings
+
+
+BSON Intro
+  how mdb actually represents data
+  document origented database -  nested dictionary of key value associations
+    obj = { "a" : 1, "b" : "hello", "c" : ["apples", "oranges", "bananas"] };
+
+
+Inserting Docs
+  db.<collection-name>.insert( document )
+  db.<collection-name>.find()
+
+  "_id" : unique id within the system -- immutable!
+  all objects in mongodb require this (unique within the collection)
+  globally unique identifier
+
+  if application does not explicitly fill in _id, mdb will create one for you
+
+Intro to 'findOne'
+  db.<collection-name>.findOne() -- return one item from the collection (at random)
+  db.<collection-name>.findOne( {"key":"value"} ) -- can add the specification of what is counted as a match
+  *no string based queries
+  db.<collection-name>.findOne( {"key":"value"}, {"name": true, "_id":false} ) -- second document filters the return (column list portion of SQL select grammar)
+  * "_id" will return by default unless explicitly left out by setting it to false
+
+
+Intro to 'find()'
+  returns a bunch of documents - retried by batches (about 20 per batch)
+  typing it will page through the bunches of documents
+  db.scores.find().pretty() -- for an easier to read output of large result sets
+
+
+Querying using field Selection
+  db.scores.find( { "student":19, "type":"essay" } ) -- what to match
+  db.scores.find( { "student":19, "type":"essay" }, { "score":true, "_id":false } ) -- what to return
+
+
+Querying using $gt and $lt
+  using query operators in mongodb:
+    db.scores.find( { "score":{ $gt : 95 } } ) -- scores greater than 95
+    db.scores.find( { "score":{ $gt : 95, $lte : 98 } } ) -- score greater than 95 and less than or equal to 98
+  $lt, $lte    less than, less than or equal to
+  $gt, $gte    greater than, greater than or equal to
+  (equal to version are inclusive of the bound(s))
+
+
+Inequalities with strings
+  lexographically comparing strings
+  -  appears earlier in the alphabet (UTF Byte Order)
+  -- length of strings
+  mongodb doesnt support locales for this and field names can store completely different types of objects
+  range comparisons dont cross datatype boundaries
+  order of $lte $gt etc doesnt matter (upper vs. lower case for strings DOES MATTER)
+
+
+Using regexes, $exists, $type
+  query based on structure and type of documents
+  db.people.find( { "professions" : { $exists : false } } ) -- does the field exist for this record...
+  db.people.find( { "name" : { $type : 2 } } ) -- numeric encoding for string type (or others)
+  db.people.find( { "name" : { $regex : "a" } } )
+
+Using $or + $and
+  $or is a prefix operator
+    db.people.find( { $or : [ { name:{$regex:"e$"}}, {age:{$exists:true}}]});
+    -- query document gets pretty messy here!
+    --- always close off json objects in a syntactically proper manner
+  $and -- less common
+    db.people.find( { $and : [ {name:{$gt:"C"}},{name:{$regex:"a"}}] } )
+    most cases where you could use this, you could just put more restriction on the same field
+        db.people.find( {name:{$gt:"C", $regex:"a"}} )
+    entering duplicate fields, it will only use the last one (it replaces the first one)
+        db.people.find( {name:{$gt:"C"}, name:{$regex:"a"}} )
+        -- this will execute = db.people.find( { name:{$regex:"a"} } )
+
+Querying inside Arrays
+  queries operate as such...
+    for each item in the collection find the given field
+      if the field contains a string, check it against the given string
+      if the field contains an array, check all elements of the array against the given string
+  *not generalized recursion going on here (it wont look down into nested content - only the top level of depth)
+
+Using $in and $all (extends querying for arrays)
+  $all:   db.accounts.find({"favorites":{$all:["beer","pretzels"]}}) -- like and within arrays
+  $in:    db.accounts.find({"favorites":{$in:["beer", "ice cream"]}}) -- like or within arrays
+
+
+Queries with dot notation:
+  stuff on righthand-side of colon - if it doesnt contain a '$' it must be in proper order
+  {"name":"richard", "email":{"work":"myemail@my.com", "personal":"otheremail@other.com"}}
+  db.users.find({"email.work" : "myemail@my.com"})
+
+Querying (cursors):
+  db.people.find() -- creates a cursor in the db and prints it out
+  cur = db.people.find(); null();
+  cur.sort();
+  cur.limit();
+  cur.skip();
+      example: db.scores.find({"type":"exam"}).sort({"score":-1}).skip(50).limit(20);
+
+Counting Results:
+  just retrieving a count of the documents that match our criteria
+  db.scores.count({"type":"exam"})
+  change out .find() for .count()
+
+
+Wholesale updating of a document:
+  in mongo shell api for updating does 4 things
+    db.people.update({name:"smith"}, {name:"thompson", salary:50000})
+  replacing (blunderbus) style update
+  -- removes any un-replaced fields (discards any existing data in the document - except for the '_ID' value)

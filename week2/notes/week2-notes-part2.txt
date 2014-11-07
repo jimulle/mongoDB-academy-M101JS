@@ -62,4 +62,29 @@ Node: Cursor
 			-- when batch runs out, cursor makes another request for a new batch - cursor manages these requests for us
 			-- with .toArray the callback isn't called until all data is returned
 			-- with .each the callback is called for each individual document - takes advantage of the batching mongod and the cursor are doing for us
+
+Node Driver Field Projection:
+	var projection = { ‘student’ : 1, ‘_id’ : 0 }; //what we want to have returned
+	db.collection(‘grades’).find({},{‘grade’:1, ‘_id’:0}, callback);
+		— find( query, projection, callback )
+
+Nodes Driver: using $lt and $gt:
+	‘$’ is a reserved character in mongoDB
+	{ ‘student’ : ‘Joe’, ’grade’ : { $gt:80, $lt:95 } }
+
+Importing Reddit:
+	to get a more interesting dataset for additional activities
+	(http://www.reddit.com/r/technology.json) — append ‘.json’ to the end of any reddit page
+	
+Nodes driver, using $regex
+	db.reddit.find({'title' : {'$regex' : 'Apple' } }, { 'title':1, '_id':0 } );
+
+Nodes Driver :: using dot notation
+	special character in mdb
+	the dot basically means ‘descend into the document and look for what follows
+
+Node Driver: Skip, Limit and Sort
+
+
+
 	
