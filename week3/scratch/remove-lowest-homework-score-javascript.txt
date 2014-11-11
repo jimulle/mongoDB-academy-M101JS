@@ -1,0 +1,20 @@
+var jsonObj = [{'type':'homework','grade':88}, {'type':'exam','grade':58}, {'type':'quiz','grade':88}, {'type':'homework','grade':100}, {'type':'exam','grade':99}, {'type':'homework','grade':90}, {'type':'homework','grade':56}, {'type':'homework','grade':60}, {'type':'homework','grade':86}, {'type':'quiz','grade':89}];
+
+var lowscore = 100;
+var removeit;
+
+for (var i=0; i<jsonObj.length; i++) {
+  if (jsonObj[i].type == "homework") {
+      if(jsonObj[i].grade <= lowscore) {
+          lowscore = jsonObj[i].grade;
+          removeit = i;
+          console.log(removeit);
+      }
+  }
+}
+
+console.log("array id: " + removeit + " type: " + jsonObj[removeit].type + " grade: " + jsonObj[removeit].grade +  " ");
+    
+jsonObj.splice(removeit, 1);
+    
+console.log(jsonObj);
