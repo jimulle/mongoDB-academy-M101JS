@@ -1,0 +1,30 @@
+Building a Blog on Node.js
+  most will be written for us, we will complete certain tasks to make it work
+  Blog application files
+    app.js application
+    routes
+    posts.js
+    sessions.js
+    users.js
+    views
+  npm install (dependencies from package.json)
+
+  Blog application architecture (stencil code):
+    app.js (connects to mongodb)
+      - routes folder
+          - sessions.js
+          - posts.js
+          - users.js
+
+    requires express, consolidate, mongodb and ''./routes'
+      routes = require('./routes'); //tells nodejs to include this director
+        -- is actually including the index.js file
+
+
+Homework 2-1
+  import and analyze weather.csv
+  mongoimport --help
+    --headerline --type
+
+Homework 2-2
+  sort by state ascending, then by temperature decreasing

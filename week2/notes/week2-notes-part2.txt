@@ -6,33 +6,33 @@ Using the $set Command
 Using the $unset command:
 	db.people.update({name:"Jones"},{$unset: {"profession": 1}})
 	value of the unset key is irrelevant/arbitrary (mongoDB will ignore it, but JSON formatting requires it)
-	
+
 Using $push, $pop, $pull, $pullAll, $pushAll, $addToSet
 	$push - add elment to array (rightmore (new) position)
 	$pop  - remove rightmost element from the array
 				{ $pop : { "a" : 1 } }  -- pop rightmost element
 				{ $pop : { "a" : -1 } } -- pop leftmost element
 	$pushAll -- adds given array of elements to the array we are manipulating
-				{ $pushAll : { "a" : [ 7, 8, 9 ] } } 
+				{ $pushAll : { "a" : [ 7, 8, 9 ] } }
 	$pull -- removes value from the array no matter what it's position is
 	$pullAll  --  removes any occurrance of the given array's values from the array
-				{ $pullAll : { "a" : [ 7, 8, 9 ] } } 
+				{ $pullAll : { "a" : [ 7, 8, 9 ] } }
 	$addToSet -- if item already exists in the array, it does nothing, otherwise it acts as a $push
-	
-	
+
+
 Upserts:
 	update operations that do not produce a match do nothing
 	what if we wanted to update an existing document but if it doesnt exist, create a new one?
 		db.people.update( { name : "george" }, { $set : { age : 40 } }, { upsert : true } );
 	MDB has to leave out fields without a concrete value (i.e. $gt: {age:50})
-	
+
 Multi-update:
 	db.people.update( {  }, { $set : { title : "Dr" } }, { multi : true } );
 	   -- the default update behavior will only update the first matched item
 	   -- { multi : true } will update all documents that match
 	-- multi-update operations can pause (yield) to allow other write operations to work while a large write (update) operaion occurs
 	-- individual write operation is always atomic and will not allow concurrent read/write (no other operation will see a partially update item)
-	
+
 
 Removing Data:
 	db.<collection>.remove( { } ) -- removes all documents
@@ -40,20 +40,20 @@ Removing Data:
 	db.<collection>.drop() -- drop collection -- implementation variation:
 			remove() requires individual removals -- keeps indexes
 			drop removes much larger data structures -- completely removes all indeces
-		remove() can affect multiple documents -- not atomic (similar to multi-update)	
+		remove() can affect multiple documents -- not atomic (similar to multi-update)
 	*no need to use multi with remove() - by default it always operates on 'all' matched records
-	
-	
+
+
 getLastError (prior to MongoDB 2.6)
 	the 2.6 shell includes much more verbose outputs to let us know the results of successful writes
-	
+
 
 Node.js Driver (+ CRUD): find, findOne and cursors
 		mongo --BSON--> mongod <--BSON-- ((driver) nodejs)
 	import data into mongo from a file:
 		mongoimport -d <db-name> -c <collection-name> <file-name>.json
-	
-		
+
+
 Node: Cursor
 	-- query not performed until documents is needed
 	Cursor --(not called until .each or .toArray is called)--> mongod
@@ -75,7 +75,7 @@ Nodes Driver: using $lt and $gt:
 Importing Reddit:
 	to get a more interesting dataset for additional activities
 	(http://www.reddit.com/r/technology.json) — append ‘.json’ to the end of any reddit page
-	
+
 Nodes driver, using $regex
 	db.reddit.find({'title' : {'$regex' : 'Apple' } }, { 'title':1, '_id':0 } );
 
@@ -84,7 +84,63 @@ Nodes Driver :: using dot notation
 	the dot basically means ‘descend into the document and look for what follows
 
 Node Driver: Skip, Limit and Sort
+	These activities take place in a very specific order:
+		1. sort
+		2. skip
+		3. limit
+
+		cursor.sort('grade', 1);
+		cursor.skip(1);
+		cursor.limit(4);
+
+	* node driver automatically reorders these commands for us.
+
+	cursor.sort([['grade', 1], ['student', -1]]);
+	// sort grade field ascending then sort secondarily by student name descending -- we use an array here to make sure these do not get reordered
+	we can use skip, limi and sort the following ways:
+		Include skip, limit, and sort options in the options object for find and findOne
+		Pass a sort order as an argument to findAndModify
+		Call the skip, limit, and sort functions on a cursor before retrieving any documents
 
 
+Driver: inserting, updating and removing
+	insert:
+		db.collection('students').insert(doc, function(err, inserted) {... //
+		inserting multiple items at a time:
+			var docs = [ { 'student' : 'Calvin', 'age' : 6 },
+									{ 'student' : 'Susie', 'age' : 7 } ];
 
-	
+			db.collection('students').insert(docs, function(err, inserted) {...
+
+	Updates:
+		replacement
+		in place
+		multi
+
+	Upserts
+		plain upserts:
+			in options object, set {'upsert':true}
+			if no match, the query gets inserted then the update gets applied to it
+		Save (wrapper)
+			more similar to replacement update
+			do a findOne() to locate the original document
+			for save function provide original doc
+			-- it replaces it
+			--- actually it checks to see if the document exists, it the _id matches it does an upsert otherwise it does an insert
+
+
+findAndModify in Nodejs Driver
+
+	query - update (replacing document with result of query)
+
+	findAndModify -atomically finds and updates the document
+		4 arguments: query. sort, operator, options
+			sort is weird b/c findAndModify only returns one document (this can just help add granularity/control over which dcument we are updating)
+		options -- return old or new document (before or after update)
+		*no two applications will have an issue here because it operates atomically
+
+
+Nodejs driver: remove
+	deleting documents
+	($nin is used for not in array -- gets passed an array)
+	.remove({},callback) == .remove(callback)
