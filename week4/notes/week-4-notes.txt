@@ -1,0 +1,267 @@
+Week 4 Intro:
+	performance is important for developer's to understand
+
+Indexes:
+	db performance in mdb is driven by: 
+		(similar to relational dbs)
+		are you going to use an index to resolve your query (or not)?
+	basics of indexing:
+		stores data in lage files on disc (collection)
+			default: db must scan through the entire collection (table scan)
+				- death to performance for large datasets
+			indexing: how does it work?
+				ordering: finding something in an ordered list is quick
+				keys and pointers to actual objects
+		in mdb: indexes - top level then sub-levels
+			at the very bottom level are pointers to actual data
+			start at the top and provide as many levels down as possible
+			*index needs updated every time the db is updated (while reads are faster)
+				- indexes are not costless
+			ex: (a, b, c)
+				query	can i use index
+				b			no
+				a 			yes
+				c 			no
+				a,b		yes
+				a,c		(just uses a part)
+				
+Creating Indexes:
+	db.students.ensureIndex({'student_id':1});
+		*index students on student_id in ascending order
+		- use db.students.find({'student_id':500000}).pretty() - now uses the index
+	db.students.ensureIndex({'student_id':1,'class':-1});
+		*second piece of index is class value sorted descending
+
+Discovering Indexes:
+	find out what indexes exist in your db
+		db.system.indexes.find()
+		db.students.getIndexes()
+	drop an index
+		db.students.dropIndex({'student_id':1})
+		
+		
+Multikey Indexes:
+	if creating an index on a key with a value that is an array - it becomes a multi-key index
+		only one of the index items can be an array
+	db.food.find().explain() -- tells us how it found the document
+	indexing is not restricted to first level keys in a documents
+		uses dot notation
+		
+Index creation option, Unique:
+	db.stuff.ensureIndex({this:1}, {unique:true})
+		- cannot insert somethng that violates the index key uniqueness
+	index on _id is unique by default and cannot be changed.
+	
+Index Creation, Removing Dups:
+	remove duplicates when creating a unique index
+		{unique:true,dropDups:true} -- dangerous: this will remove all but one of the duplicate documents from the db (mpt just omitted from the index)
+	
+Index Creation, Sparse:
+	Sparse Indexes (creating indexes when index key is missing from a document)
+		*if a key is missing for an item, it's index is key:null
+	sparse will only create index entries for items with the indexed key
+		{unique:true, sparse:true}
+	sorting on a sparse index (this behavior changed in MDB 2.4 --> MDB 2.6)
+		-- by default mdb will not use an index that leaves out items that should be included (danger of omitted documents resolved)
+		.hint({size:1}) -- tells mdb to use a specific index   
+	
+Index Creation. Background:
+	background:
+		by defauly index is created in foreground (blocks all other writers) -- fast
+		background:true (writes can happen concurrently) -- slow
+	can only build one background index per db
+	if running in a replica system, pull a server out of replica set, build index in foreground then bring it back into the replica set
+	although the db server will continue to take requests, a background index creation still blocks the mongo shell that is being used to create the index
+	
+Using Explain:
+	tells you exactly what index was used for a query and how it was used
+	.explain()
+		returns how the db performed the query
+			"cursor" : "BasicCursor"  ||  "BtreeCursor a_1_b_1_c_1"     //lookup method
+			"isMultiKey" : true  ||  false
+			"n" : 1    //number of documents returned
+			"nscannedObjects" :   //number of documents scanned to answer the query
+			"nscanned" :    //number of index entries or documents scanned
+			...
+			"indexOnly" : false   //query can be completely satisfied by the index (no need to go to the actual collection to answer the query)
+			...
+			"millis" : 3    //time to execute the query
+			...
+			"indexBounds" : 
+	
+When is an Index Used:
+	Choosing an index:
+		MDB runs all available query plans the first time.
+			it then remembers which query had the fastest return time and uses that query plan solely next time (checks itself periodically)
+		find, findOne, update and remove all benefit from indexes
+	
+How Large is Your Index:
+	we need our indexes to be in memory for the best speed gains (controlling index size)
+	how big is an index?
+		db.students.totalIndexSize()  -- find out size of indexes
+	
+Index Cardinality:
+	Regular			Sparse			Multikey
+	1:1					<= docs			> docs
+	
+	maintaining indexes (for example when a document moves)
+	
+Index selectivity:
+	example:
+		logging	save	-	
+						open	-	
+						run		-	
+						put		-	
+						get		-	
+			index on (timestamp,opcode) vs (opcode,timestamp)
+				-- (timestamp,opcode) is the better option because it eliminates more of the data
+	
+Providing a hint to the database:
+	.hint({a:1,b:1,c:1})
+	.hint({$natural:1})
+	
+	
+
+Hinting in Node.js (and using explain in the driver):
+	example of using explain in nodejs driver:
+		var cursor = db.collection('coll').find({'x':2});
+		cursor.explain(function(err, explain_output){
+			if (err) throw err;
+			console.log(explain_output);
+			db.close();
+		});
+	hinting example:
+		var cursor = db.collection('coll').find({ 'x' : 2 }, {}, { 'hint' : { '$natural' : 1 } });   //not using an index at all
+		cursor.explain(function(err, explain_output){
+			if (err) throw err;
+			console.log(explain_output);
+			db.close();
+		});
+		// alternative example
+		var cursor = db.collection('coll').find({ 'x' : 2 }, {}, { 'hint' : { '_id' : 1 } });   //if there is an index on '_id' it should use that index
+		
+Efficiency of index use:
+	$gt and $lt may not use an index very efficiently
+	$ne (not in, doesnt exist) uses indexes really inefficiently because it touches all items
+	regex:    /abcd/ is slow, but /^abcd/ does take advantage of the index
+	*based on our knowledge of data and its structure, it may be more efficient to suggest an alternative index to MDB
+	Not only if an index was used, but how it was used
+
+Geospatial Indexes:
+	allow you to find things based on location (2D and 3D)
+	2D:
+		(x,y) plane
+		document needs to have some kind of x,y location data
+			ex.	'location' : [x,y]
+					ensureIndex({ 'location' : '2d', type : 1 })    //type : 1 is optional - multiparameter index
+					find({ 'location' : { $near : [x, y] } }).limit(20)   //db returns 20 locations in order of increasing distance
+	
+	2D (spherical):
+		2dsphere
+		- google maps is very convenient for finding the lat/lng for locations (lat, lng order)
+		MDB takes locations in lng, lat
+			GeoJSON is used by MDB (only implements a small portion)
+				example from lecture:
+					'location' : {
+							'type' : "Point",
+							'coordinates': [
+											-122.129,
+											36.445
+							]
+					}
+				to query, we need an index on location
+					db.places.ensureIndex( { 'location' : '2dsphere' } );
+					db.places.find({
+									'location' : {
+												$near : {
+														$geometry : {
+																		type : "Point",
+																		coordinates: [-122.167, 37.428]
+														},
+														$maxDistance : 2000
+												}
+									}
+					}).pretty();
+				
+Text Searches in MDB:
+	full text search (available in 2.6)
+	when would you use:
+		large text in key mytext : '___________'
+			by default in MDB a string must match completely
+		db.sentences.ensureIndex( { 'words' " 'text' } )
+		db.sentences.find( { $text : { $search : 'dog' } } ) 
+			//$search is a logical or -- the words in the search string are searched as or terms and can return matches to just one or a few, not just all matches
+			//db.sentences.find( { word :  'dog'  } ) -- this returns nothing because it doesnt use the text index
+		best match:
+			db.sentences.find( { $text : { $search : 'dog tree obsidian' } }, { score : { $meta : 'textScore; } } ).sort( { score : { $meta: 'textScore' } } )
+		
+Logging Slow Queries:
+	Logging and profiling
+	Log slow queries (queries above 100ms)
+		text log    100ms   (defauly logging)
+
+Profiling (Profiler):
+	logs to system.profile
+	levels:
+		0 - off
+		1 - log slow queries (performance debugging feature)
+		2 - log all queries (general debugging feature)
+	mongodb --profile 1 --slowms 2
+	db.system.profile 
+		//this is a fixed size collection, it will recycle old space once full
+		//can use .find() within the system.profile because it is a collection
+	db.getProfilingLevel()
+	db.getProfilingStatus()
+	db.setProfilingLevel(1,4)
+		//slow queries above 4 ms (set to level 1)
+		//db.setProfilingLevel(LEVEL,MILLIS)
+		db.setProfilingLevel(0) //turns profiler off
+	example: all queries that took longer than 1 second, ordered by timestamp descending
+		db.system.profile.find({ 'millis' : { $gt : 1000 } }).sort({ 'ts' : -1 })
+		
+Review:
+	Indexes are critical to performance
+	Explain -- look at what db is doing for a particular query
+	Hint -- instruct db to use a particular index for a query
+	Profiling -- determine which queries are slow
+		
+Mongotop:
+	unix top command:
+		high level view of where mongo is spending it's time
+	mongotop 3  //run it every 3 seconds
+		provides time in each collection, total read time vs total write time
+
+Mongostat:
+	unix iostat
+		more system level information
+	idx miss % -- miss rate to the index in memory
+		//if program does not use an index, you will not see missed index stats
+	
+Sharding Overview:
+	technique to split up a large collection amoung multiple servers
+		deploy multiple mongod servers with a mongos router
+		//a replica set is one shard
+	mdb shards based on a shard key
+		ex. student_id
+	insert must include the shard key
+	update, remove, find : without a shard key, it would have to boradcast to all shards that cover the collection
+	update (without entire shard key, needs to be a mutli update for broadcasting)
+	mongos lets you shard a collection, split it across multiple servers
+	
+	
+Homework:
+	HW4-3:
+		indexes:
+			{ date : -1 }   for getPosts()
+			{ tag : 1, date : -1 }    for getPostsByTag()
+			{ permalink : 1 }    for getPostsByPermalink()
+	
+
+
+	
+	
+	
+	
+	
+	
+	
