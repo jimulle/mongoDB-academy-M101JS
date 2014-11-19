@@ -1,0 +1,213 @@
+Aggregation framework:
+	roots in the world of SQLs groupby clause
+	
+Simple example:
+	SQL
+		products table
+			name		category		mnfctr			price
+			ipod		mp3			apple			499
+			nexus		phone			samsung	350
+		Select mnfctr, count(*) from Products, group by mnfctr
+			mnfctr				count(*)
+			apple				2
+			samsung		3
+		count(*)   --- group by
+	MDB:
+		_id, name, category, mnfctr, price
+		db.products.aggregate( [
+			{ $group:
+				{ 
+					_id : "$mnfctr",
+					num_products:{ $sum : 1 }
+				}
+			}
+		] )
+		--	_id is a group by field -- essentially creates a new collection
+		--	QUIZ:  db.products.aggregate( [ { $group : { "_id" : "$category", "num_products" : { $sum : 1 } } } ] )
+		
+Aggregation pipeline:
+	collection ------>       $project -> $match -> $group -> $sort      -----> result
+		$project:  reshape the document -- select out certain fields -- 1:1 document handling
+		$match:  filtering step -- n:1 (reduce number of documents -- potentially)
+		$group:  allows you to do the aggregation -- $sum, $count -- n:1
+		$sort: sort documents -- 1:1
+		$skip: skips forward in the documents -- n:1 (some documents enter that dont exit)
+		$limit:  limits documents returned -- n:1
+		$unwind: normalize data -- 1:n
+			tags:["red","blue","green"]    --- becomes -->    3 documents: tags:"red"   tags:"blue"   tags:"green
+			expands the number of documents we have
+		$out:  name collection that should get the results
+		--------------------------------- not discussed in this course ----------------------------------------------------
+		$redact:  limits what documents certain users see (security)
+		$geonear: limit documents geographically
+		
+Simple Expanded Example:
+	Products collection
+	$group
+	results collection
+	-- db.products.aggregate( [ { $group : { "_id" : "$mnfctr", "num_products" : { $sum : 1 } } } ] )
+		as it runs through the collection, it prrocesses each document and updates the result collection (almost like an upsert)
+			i.e. does _id:"Apple" exist ? if yes, add 1 and if no create it and add 1
+	
+Compound Grouping:
+	select mnfctr, category count(*) from products, group by mnfctr, category
+	using a compound _id key
+	            db.products.aggregate( [ 
+					{ 
+						$group : { 
+							_id : { 
+								"manufacturer" : "$manufacturer:,
+								"category" : "$category" 
+							},
+							"num_products" : { $sum : 1 }
+						} 
+					} ] )
+		results: (example)
+			{ "_id" : { "manufacturer" : "Amazon", "category" : "tablets" }, "num_products" : 2 }
+		Compound key in grpouping phase can have as many keys as we want
+		
+Using a document for _id:
+	db.foo.insert( { _id : { name : "andrew", class : "m101" }, hometown : "NY" } )
+	-- compund _id's are not just for aggregation, they are valid throughout MDB
+	
+Aggregaion Expressions:
+	$sum	-  count or add values of a key
+	$avg	-  average value of key
+	$min	- lowest value of a key
+	$max	- highest
+	$push	-  push a value onto an array
+	$addToSet	-  like push, but only adds uniquely
+	$first	-  sort documents first -- 
+	$last	-  sort documents first -- 
+	
+Using $sum:
+	db.products.aggregate( [
+		{ $group :
+			{
+				_id : {
+					"maker" : "$manufacturer"
+				},
+				sum_prices : { $sum : "$price" }
+			}
+		}
+	] )
+
+Using $avg:
+	_id : { "category" : "$category" },
+	avg_price : { $avg : "$price" }
+	
+Using $addToSet:
+	-- no direct parallel from the world of SQL
+	db.products.aggregate( [
+		{ $group :
+			{
+				_id : {
+					"maker" : "$manufacturer"
+				},
+				categories : { $addToSet : "$category" } 
+				// adds category to categories array only if it doesnt already exist in the array
+			}
+		}
+	] )
+	Quiz:
+		db.zips.aggregate( [
+			{ "$group" :
+				{
+					"_id" : "$city",
+					"postal_codes" : { "$addToSet" : "$_id" } 
+				}
+			}
+		] )
+	
+Using	$push:
+	db.zips.aggregate( [
+		{ "$group" :
+			{
+				"_id" : "$city",
+				"postal_codes" : { "$push" : "$_id" } 
+				// adds categories to the array (even if duplicates)
+			}
+		}
+	] )
+
+Using $max and $min:
+	db.products.aggregate( [
+		{ "$group" :
+			{
+				"_id" : "$manufacturer",
+				"max_price" : { "$max" : "$price" } 
+			}
+		}
+	] )
+	Quiz:
+		db.zips.aggregate( [
+			{ "$group" :
+				{
+					"_id" : "$state",
+					"pop" : { "$max" : "$pop" } 
+				}
+			}
+		] )
+		
+Double $group stages:
+	-- can run an aggregation stage more than once
+	db.grades.aggregate( [
+		{ $group : { _id : { "$class_id", student_id : "$student_id" }, 'average' : { $avg : "$score" } } },
+		{ $group : { _id : { "$_id.class_id" }, 'average' : { $avg : "$average" } } }
+	] )
+	Quiz:
+		{ a : 0	b : 0 }	c : 54		//stage 1 grouping _id : { a, b } and $max c
+		{ a : 0	b : 1 }	c : 52
+		{ a : 1	b : 0 }	c : 22
+		{ a : 1	b : 1 }	c : 97
+		--------------------------------
+		{ a : 0 } c : 52					//stage 2 grouping _id : { a } and $min c
+		{ a : 1 } c : 22
+		
+Using $project:
+	1 : 1 phase
+	-  remove keys (filter before grouping)
+	-  add new keys
+	-  reshape keys
+	-  use some simple functions on keys:
+		-  $toUpper
+		-  $toLower
+		-  $add
+		-  $multiply
+	db.products.aggregate( [
+		{ "$project" :
+			{
+				_id : 0,
+				'maker' : { $toLower : "$manufacturer" },
+				'details' : { 'category' : "$category", 'price' : { '$multiply' : [ "$price", 10 ] } },
+				'item' : '$name'
+			}
+		}
+	] )
+	Quiz:
+		db.zips.aggregate( [
+			{ "$project" :
+				{
+					_id : 0,
+					'city' : { $toLower : "$city" },
+					'pop' : 1,
+					'state' : 1,
+					'zip' : "$_id"
+				}
+			}
+		] )
+
+Using $match:
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	...
