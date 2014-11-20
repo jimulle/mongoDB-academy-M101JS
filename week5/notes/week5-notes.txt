@@ -198,6 +198,110 @@ Using $project:
 		] )
 
 Using $match:
+	filter			n : 1
+		- pre-aggregation filter
+		- filter results
+	Example:
+		db.zips.aggregate( [
+			{ $match :
+				{
+					state : "CA"
+				}
+			},
+			{ $group :
+				{
+					_id : "$city",
+					population : { $sum : "$pop" },
+					zip_codes : { $addToSet : "$_id" }
+				}
+			},
+			{ $project :  //specifies which fields to bring through, but it doesnt retain the order
+				{
+					_id : 0,
+					city : "$_id",
+					population : 1,
+					zip_codes : 1
+				}
+			}
+		] )
+	Quiz:	db.zips.aggregate( [ { $match : { pop : { $gt : 100000 } } } ] )
+	* for $match and $sort, they can use indexes but only if done at the beginning of the aggregation pipeline
+	
+Using $sort:
+	- agg framework supports both disk and memory based sorting (memory has 100MB limit per pipeline stage)
+	- can do before or after grouping stage (or both)
+	Example:
+		db.zips.aggregate( [
+			{ $match : { state : "NY" } },
+			{ $group : { _id : "$city", population : { $sum : "$pop" } } },
+			{ $project : { _id : 0, city : "$_id", population : 1 } },
+			{ $sort : 
+				{
+					population : -1    //sort by population descending
+				}
+			}
+		] )
+	Quiz:	db.zips.aggregate( [ { $sort : { state : 1, city : 1 } } ] )
+
+Using $limit and $skip:
+	1. sort first otherwise result is undefined
+	2. then skip
+	3. then limit
+	*with a find() the skip and limit order didnt matter, but in aggregation (with an ordered list of stages) the order we declare skip and limit DO matter!
+	Example:
+		db.zips.aggregate( [
+			{ $match : { state : "NY" } },
+			{ $group : { _id : "$city", population : { $sum : "$pop" } } },
+			{ $project : { _id : 0, city : "$_id", population : 1 } },
+			{ $sort : { population : -1 } },
+			{ $skip : 10 },
+			{ $limit : 5 }
+		] )
+	
+Revisiting $first and $last:
+	1. sort (a, b)
+	2. group (a)
+		a : 0	b: 23 <-- $first
+		a : 0	b: 45
+		a : 0	b: 97 <-- $last
+		a : 1	b: 17 <-- $first
+		a : 1	b: 68
+		a : 1	b: 73 <-- $last
+	example:
+		...
+			{ $group :
+				{
+					_id : "$_id.state",
+					city : { $first : "$_id.city" },
+					population : { $first : "$population" }
+				}
+			}
+		...
+		
+Using $unwind:
+	{ a:1, b:2, c : [ 'apple', 'pear', 'orange' ] }
+	$unwind : "$c"
+		YIELDS:
+		{ a:1, b:2, c : 'apple' }
+		{ a:1, b:2, c : 'pear' }
+		{ a:1, b:2, c : 'orange' }
+	
+	* use a $push to reverse the effects of an unwind
+	  (not $addToSet because the original set (array) could have had duplicates)
+	
+Double $unwind:
+	when you have more than one array in a document
+	can reverse this result with $push operator (technically two $push operators in a row)
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	
 	
