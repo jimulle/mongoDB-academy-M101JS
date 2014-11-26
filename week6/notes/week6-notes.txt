@@ -1,0 +1,116 @@
+Week 6 - Application Engineering:
+	Replication and Sharding
+	
+Intro to Replication:
+	Availability & Fault Tolerance
+	Replica Set
+		- a set of mondod nodes that act together and mirror eachother 
+			1 primary and multiple secondaries
+		- application and drivers stay connected to primary (can only write to primary)
+			- if primary goes down, secondary nodes elect a new primary, app automatically connects to the new primary
+				- when the original primary node comes back up it becomes a secondary
+		- requires 3 nodes
+		
+Replica Set Elections:
+	regular  (has data and can become primary)
+	arbiter  (just exists for voting purposes - to give an even number of replica set nodes) -- no data on it
+	delayed/regular  (disaster recovery node - set behind other nodes - can participate in voting but cannot become a primary node) P=0
+	hidden  (used for analytics - cannot become primary but can participate in elections) - P=0
+	-- assume every node has 1 vote
+	-- election process is pretty transparent to the whole application
+	
+Write Consistency:
+	default config: writes and reads go to primary -- yields strong consistency with reads
+		- reads can be directed to secondary nodes -- may read stale data (relative to what is written into the primary) -- lag between primary and secondary nodes is not guaranteed because asynchronous
+	When failover occurs, cannot write until a new primary is elected
+	Alternative DBs to mongodb use eventual consistency (writes can go to any node)... data will eventually exists in all replicas - at some point in time
+		-- not offered in mongodb
+		
+Creating a replica set:
+	usually put one mongod on different server for fault tolerence (can set up replicas on one computer for testing)
+		file create_replica_set.sh
+			mkdir -p /data/rs1 /data/rs2 /data/rs3
+			mongod --replSet rs1 --logpath "1.log" --dbpath /data/rs1 --port 27017 --fork             //listening on standard port
+			mongod --replSet rs1 --logpath "2.log" --dbpath /data/rs2 --port 27018 --fork             //--fork allows it to work within on shell
+			mongod --replSet rs1 --logpath "3.log" --dbpath /data/rs3 --port 27019 --fork
+		bash < create_replica_set.sh
+		more 1.log       //warning that it is not totally configured yet (server do not know about eachother -- they cant act in concert yet)
+		file init_replica.js
+			config = 	{  _id : "rs1",       //the _id must be the replSet name
+			                   members : [
+								{  _id : 0, host : "Jims-MacBookAir.local:27017", priority : 0, slaveDelay : 5 },
+								{  _id : 1, host : "Jims-MacBookAir.local:27018" },
+								{  _id : 2, host : "Jims-MacBookAir.local:27019" } ]
+							}
+			rs.initiate(config)
+			rs.status()
+		***cannot initialize a replica set from a host that cannot be come primary***
+		mongo --port 27018      //opens up shell for tha port
+		mongo --port 27018 < init_replica.js
+		mongo --port 27018
+		rs1:PRIMARY>  rs.status()
+		mongo --port 27017    //will show as secondary
+		mongo --port 27018
+		rs1:PRIMARY> db.people.insert({'name':'jim'});
+		mongo --port 27019
+		rs1:SECONDARY> dn.people.find()    // error: { "$err" : "not master and slaveOk=false"..... }
+		rs1:SECONDARY> rs.slaveOk()   //tells mongo we are okay with reading from secondary
+		rs1:SECONDARY> dn.people.find()    // this query works now
+		
+Implications of replication:
+	- seed lists (when using drivers, the drivers need to know about at least one member of the replica set)
+	- write concern (waiting for nodes to recognize your write, W, wtimeout - waiting for write to propogate to replicas)
+	- read preferences (decide which node(s) to read from - if reading from secondaries, application needs to be okay with reading potentially stale data)
+	- errors can happen (failover occuring, network errors, unique key constraint errors -- check for exceptions when reading/writing data)
+	
+Replica Set Internals:
+	rs.isMaster() determines if node is master db
+	there is a special collection, cap collection in the local db that loops after it fills
+		oplog.rs
+			shows an insert
+			secondaries query the primary for data in here since the last time
+	how long does failover take
+		quit primary
+			ps -ef | grep mongo
+			kill 6463    //number for primary from previous command
+					-- 27018 is unreachable
+					-- 27019 is not the primary (very very fast failover) - took less than 3 seconds
+
+Failover and Rollback:
+	3 servers
+		1 (primary)
+		2
+		3
+	-- 2 and 3 are lagging behind slightly
+		- if 1 goes down 3 becomes primary bit is missing some writes from 1 that were not propogated yet
+		- when 1 comes back up, he will look at 3 (new primary) to see if there is anything he needs to take
+			- 1 notices writes in it's db that are not in the primary (3) 
+				- takes those writes and rolls them back (rollback) putting them into a file but not making them part of the dataset (can be manually rolled back in)
+				- set w write concern to wait until the majority of the nodes have the write it will avoid this issue
+	If a node comes back up as a secondary after a period of being offline and the oplog has looped on the primary?
+		- The entire dataset will be copied from the primary	 (slow inefficient operation but it will work properly)
+
+Connecting to a Replica Set from the NodeJS Driver:
+	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
