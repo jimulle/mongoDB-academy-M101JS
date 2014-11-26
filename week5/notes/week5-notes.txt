@@ -294,13 +294,101 @@ Double $unwind:
 	can reverse this result with $push operator (technically two $push operators in a row)
 	
 	
+Mapping from SQL to MDB:
+	SQL					MDB
+	---------------------------------------------------------
+	WHERE				$match
+	GROUP BY		$group
+	HAVING				$match
+	SELECT			$project
+	ORDER BY		$sort
+	LIMIT					$limit
+	SUM()					$sum : '$key)to_sum"
+	COUNT()			$sum : 1
+	JOIN					No direct corresponding operator.
+								The $unwind operator allows for somewhat similar functionality but with fields embedded in the document
 	
+Some Common SQL Examples:
+	SQL																					MDB
+	---------------------------------------------------------------------------------------------------------------------
+	SELECT COUNT(*) AS count FROM orders				db.orders.aggregate( [ { $group : 
+																										{ _id : null, count : { $sum : 1 } } } ] )
+
+Limitations of the Aggregation Framework:
+	By default, we have a 100MB limit for pipeline stages
+		- 'allowDiskUse' gets us around this limitation
+	16MB limit by default in python
+		- cursor = {  }
+	Sharding: in a sharded system, as soon as we use a group by or sort
+		- MDB sends all data to the primary shard for the DB
+		- results sent to one shard for further processing
+		---- alternatives to aggregation
+					- hadoop for map/reduce with the hadoop connector
+					- map/reduce functionality built into MDB - not recommended!
 	
+Homework 5.1:
+	db.posts.aggregate( [
+		{ $unwind : "$comments"},
+		{ $group : { 
+							_id : "$comments.author",
+							"num_posts" : { $sum : 1 }
+			}
+		},
+		{ $sort : { "num_posts" : -1 } },
+		{ $limit : 1 }
+	] )
 	
+Homework 5.2:
+	db.zips.aggregate( [
+		{ $match : { $or : [ { state : "CA" }, { state : "NY" } ] } },
+		{ $group : { 
+							_id : { state : "$state", city : "$city" },
+							"population" : { $sum : "$pop" }
+			}
+		},
+		{ $match : { population : { $gt : 25000 } } },
+		{ $group : {
+				_id : "answer",
+				average_population : { $avg : "$population" }
+			}
+		}
+	] )
 	
+Homework 5.3:
+	db.grades.aggregate( [
+		{ $unwind : "$scores" },
+		{ $project : {
+				_id : 1, 
+				student_id : 1,
+				class_id : 1,
+				type : "$scores.type",
+				score : "$scores.score"
+			}
+		},
+		{ $match : { $or : [ { type : "exam" }, { type : "homework" } ] } },
+		{ $group : 
+			{ _id : { class_id : "$class_id", student_id : "$student_id" } ,
+			average : { $avg : "$score"} }
+		},
+		{ $group : 
+			{ _id : "$_id.class_id", average : { $avg : "$average" } }
+		},
+		{ $sort : { average : -1 } },
+		{ $limit : 1 }
+	] )
 	
-	
-	
+Homework 5.4:
+	db.zips.aggregate( [
+		{ $project : { 
+			_id : 1,
+			city : 1,
+			pop : 1,
+			state : 1,
+			first_char : { $substr : [ "$city",0,1 ] }
+		} },
+		{ $match : { first_char : { $regex: /\d/, $options: '' } } },
+		{ $group : { _id : "answer", population : { $sum : "$pop" } } }
+	] )
 	
 	
 	
