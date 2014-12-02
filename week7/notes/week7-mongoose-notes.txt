@@ -1,0 +1,310 @@
+Introduction to Week 7 (Mongoose):
+	new instructor for this week: Aaron Heckmann -- mongoose -- jade -- blog
+	Mongoose is an ODM for mongodb
+		define a scheme for documents and mongoose validates inserts against that schema
+
+Creating a blog with express and mongoose:
+	Structure:
+		homepage:	title with a list of links
+			-> links go to a new page with title of post, text of posts and comments + comment form
+		login button at top corner -> page that allows us to create an account (email, password, name and login button) form
+		create a new blog post page: inputs for title, body and save button (body input accept markdown)
+		
+express and mongoose:
+	npm init 			[command]
+		-- allows us to walk through creating a package.json file
+		{
+			"name": "week7",
+			"private": true,     //prevents us from publishing this application back to npm
+			"version": "0.0.0",
+			...
+		}
+	npm install mongoose --save		//adds to package.json file
+	atom package.json		//we can see that NPM added the dependencies we needed (with latest version specified)
+	atom app.js
+		var mongoose = require('mongoose');
+		console.log(mongoose.version);
+	node app.js		//outputs mongoose version
+	atom app.js
+		var mongoose = require('mongoose');
+		mongoose.connect('mongodb://localhost', function(err) { \
+			if (err) throw err; 
+			console.log('connected!');
+			mongoose.disconnect();
+		});
+	node app.js
+	npm install express --save
+	atom app.js
+		var mongoose = require('mongoose');
+		var express = require('express');
+		mongoose.connect('mongodb://localhost', function(err) { \
+			if (err) throw err; 
+			console.log('connected!');
+			var app = express();
+			app.get('/', function(req, res) {
+				res.send(200, 'hello mongoose blog');
+			});
+			app.listen(3000, function() { 
+				console.log('now listening on http://localhost:3000'); 
+			});
+		});
+		node app.js
+		
+Jade:
+		npm instal jade --save
+		atom app.js
+			var mongoose = require('mongoose');
+			var express = require('express');
+			var routes = require('./routes');
+			mongoose.connect('mongodb://localhost', function(err) { \
+				if (err) throw err; 
+				console.log('connected!');
+				var app = express();
+				routes(app); 		//pass express app to routes 
+				app.listen(3000, function() { 
+					console.log('now listening on http://localhost:3000'); 
+				});
+			});
+		atom routes/index.js
+			module.exports = function (app) {
+				//home page
+				app.get('/', function (req, res) {
+					res.render('home.jade');
+				});
+			}
+		atom views/home.jade		//looks nothing like HTML
+			extends layout				//this view extends the layout jade template
+			block content
+				if !(posts && posts.length)				//have we passed any posts to our view
+					p Nothign to see here. Move along...
+				else														//if we have posts, output posts in an unordered lis
+					ul.posts
+						each post in posts
+							li
+								h2
+									a(href="/post/#{post.id}")= post.title        //definition of another route
+		atom views/layout.jade
+			html5
+			html
+				head
+					title= pageTitle
+				body
+					header
+						h1= pageTitle
+					section.content								//named block (a view that inherits from this template can replace this block)
+						block content
+		
+Views:
+	...
+		
+Error Handling:
+		atom routes/index.js
+			var errors = require('./errors');
+			module.exports = function (app) {
+				//home page
+				app.get('/', function (req, res) {
+					res.render('home.jade');
+				});
+				//error handlers
+				errors(app);
+			}
+		atom routes/errors.js
+			module.exports = function (app) {
+				//404s
+				app.use(function(req, res, next) {
+					res.status(404);
+					if (req.accepts('html')) {
+						return res.send("<h2>I'm sorry, I couldn't find that page.</h2>");
+					}
+					if (req.accepts('json') {
+						return res.json({error: 'Not found'});
+					}
+					//default response type
+					res.type('txt');
+					res.send("Hmmm, couldn't find that page.");
+				});
+				//500
+				app.use(function(err, req, res, next) {
+					console.error('error at %s\n', req.url, err);
+					res.send(500, "Oops, we made a boo boo");
+				});
+			}
+			
+Authentication:
+		atom views/layout.js
+			html5
+			html
+				head
+					title= pageTitle
+				body
+					header
+						h1= pageTitle
+						section.login
+							ul
+								if session.isLoggedIn
+									li
+										a(href="/logout") Logout
+								else
+									li 
+										a(href="/login") Login
+									li
+										a(href="/signup") Create Account
+					section.content	
+						block content
+		atom  views/signup.js
+			extends layout
+			block content
+				form(method='post', action='/signup', enctype='application/x-www-form-urlencoded')
+					h3 Sign up
+					if exists
+						.error
+							| That user exists. Are you trying to
+							a(href="/login") Login
+							| ?
+					if invalid
+						.error Please enter a valid email address and password.
+					ul
+						li
+							label(for='email') Email
+							input#email(name='email')
+						li
+							label(for='pass') Password
+							input#pass(name='pass')
+					input(type='submit', value='Sign Up')
+		atom views login.js
+			extends layout
+			block content
+				form(method='post', action='/login', enctype='application/x-www-form-urlencoded')
+					h3 Login
+					if invalid
+						.error Please enter a valid email address and password.
+					ul
+						li
+							label(for='email') Email
+							input#email(name='email')
+						li
+							label(for='pass') Password
+							input#pass(name='pass')
+					input(type='submit', value='Log In')
+					
+Model:
+	atom models/user.js
+		var mongoose = require('mongoose');
+		var validEmail = require('../helpers/validate/email');
+		var schema = mongoose.Schema({
+			_id: { type: String, validate: validEmail },
+			name:	{ first: String, last: String },
+			salt: { type: String, required: true },
+			hash: { type: String, required: true },
+			created: { type: Date, default: Date.now }
+		});
+		mongoose.model('User', schema);
+		
+Middleware:
+	atom middleware/index.js
+		var express = require('express');
+		module.exports = function(app) {
+			app.use(express.logger('dev'));
+			//this is good enough for now but you'll
+			//want to use connect-mongo or similar
+			//for persistant sessions
+			app.use(express.cookieParser());
+			app.use(express.session({ secret: 'building a blog' }));
+			app.use(express.bodyParser());
+			//expose session to views
+			app.use(function (req, res, next) {
+				res.locals.session = req.session;
+				next();
+			});
+		}
+		
+Routes:
+	atom routes/index.js
+		var errors = require('./errors');
+		var login - require('./login');
+		module.exports = function (app) {
+			//home page
+			app.get('/', function (req, res) {
+				res.render('home.jade');
+			});
+			//login / logout routes
+			login(app);
+			//error handlers
+			errors(app);
+		}
+	atom routes/login.js
+		var mongoose = require('mongoose');
+		var User = mongoose.model('User');
+		var cleanString = require('../helpers/cleanString');
+		var hash = require('../helpers/hash');
+		var crypto = require('crypto');
+		module.exports = function(app) {
+			app.get('/signup', function (req, res) {
+				res.render('signup.jade');
+			});
+			//create new account
+			app.post('/signup', function (req, res, next) {
+				var email = cleanString(req.param('email'));
+				var pass = cleanString(req.param('pass'));
+				if(!(email && pass)) {
+					return invalid();
+				}
+				User.findById(email, function (err, user) {
+					if (err) return next(err);
+					if (user) {
+						return res.render('signup.jade', {exists: true});
+					}
+					crypto.randomBytes(16, function (err, bytes) {
+						if (err) return next(err);
+						var user = { _id: email };
+						user.salt = bytes.toString('utf8');
+						user.hash = hash(pass, user.salt);
+						User.create(user, function(err, newUser) {
+							if (err) {
+								if (err instanceof mongoose.Error.ValidationError) {
+									return invalid();
+								}
+								return next(err);
+							}
+							//user created successfully
+							req.session.isLoggedIn = true;
+							req.session.user = email;
+							console.log('created user: %s', email);
+							return res.redirect('/');
+						});
+					});
+				});
+			});
+		}
+	node app.js
+	
+	good plugins for mongoose on plugins.mongoose.js.com
+	
+Login Simplification:
+	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		

@@ -91,9 +91,90 @@ Failover and Rollback:
 		- The entire dataset will be copied from the primary	 (slow inefficient operation but it will work properly)
 
 Connecting to a Replica Set from the NodeJS Driver:
+	driver will do a lot of work for us managing connections and monitoring which nodes are up
+	start with a connection string for the driver
+		-- driver can automatically detect a replica set
+	var MongoClient = require('mongodb').MongoClient;
+	MongoClient.connect("mongodb://localhost:30001," + "localhost:30002," + "localhost:30003/course", function(err, db) {
+		if (err) throw err;
+		db.collection("repl").insert({ 'x' : 1 }, function(err, doc) {
+			if (err) throw err;
+			db.collection("repl").findOne({ 'x' : 1 }, function(err, doc) {
+				if (err) throw err;
+				console.log(doc);
+				db.close();
+			});
+		});
+	});
+	//connecting to primary, setting up read and write nodes, etc all happens behind the scenes in the driver.
 	
+Failover in the nodejs driver:
+	by default write and reads go to primary
+	reads and writes get buffered in the driver until failover completes and there is a new primary
+	
+Write Concern: (nodejs driver)
+	specify behavior of writes in mongodb
+	default is w:1
+		send response to user once primary acknowledges the write
+	w:0
+		no write acknowledgement or callback occurs, or it is unnecessary
+	w:2+
+		how many nodes need to acknowledge that they received the write before returns success
+	w:'j'
+		write to primaries journal (persisted to disk) before success
+	w:'majority'
+		write to majority of nodes before success
+	
+	var MongoClient = require('mongodb').MongoClient;
+	//this connection string sets the write concern using a format similar to a querystring
+	MongoClient.connect("mongodb://localhost:30001," + "localhost:30002," + "localhost:30003/course?w=1", function(err, db) {  
+		if (err) throw err;
+		//write concern of 1
+		db.collection("repl").insert({ 'x' : 1 }, function(err, doc) {
+			if (err) throw err;
+			console.log(doc)
+			
+			//write concern of 2
+			db.collection("repl").insert({ 'x' : 2 }, { 'w' : 2 }, function(err, doc) {
+				if (err) throw err;
+				console.log(doc);
+				db.close();
+			});
+		});
+	});
+	
+	*a write concern larger than the number of nodes currently up causes the write to wait forever
+	
+Read preferences:
+	by default all reads from driver will go to primary
+		can be configured for applications
+	primary, secondaries (only), prefer primary/secondary, nearest node
 		
-		
+	...
+	ReadPreference = require('mongodb').ReadPreference;
+	MongoClient.connect("mongodb://localhost:30001," + "localhost:30002," + "localhost:30003/course?readPreference-secondary", function(err, db) {  
+	...
+	//reads will wait for a primary
+	db.collection("repl").findOne({ 'x' : 1 }, { 'readPreference' : ReadPreference.PRIMARY }, function (err, doc) { ... } );
+	
+	//reads prefer secondary but will use primary if secondary isnt an option
+	db.collection("repl").findOne({ 'x' : 1 }, function (err, doc) { ... } );
+	
+	guarantees you get when reading from a secondary are not the same as the primary
+	-- if reads come from secondaries, we may not have the most up-to-date data
+	-- weigh benefits vs. risks of secondary read preference
+	
+	Why might you not want to set up an application to read from the secondary?
+		reading from secondary adds more traffic to the secondary
+		you may not read what you just wrote
+		may slow down secondary if it isnt powerful enough to keep up with all the reads
+	
+
+
+
+
+
+	
 		
 		
 		
