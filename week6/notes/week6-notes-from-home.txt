@@ -1,0 +1,115 @@
+Network Errors:
+  j=1, w=1
+  a network error could cause confirmation to fail
+  -- can often check after the fact to see if the write happened
+  there is a certain degree of uncertainty in any network based application
+
+Introduction to Sharding:
+  MDB approach to horizontal scalability
+  **final major topic**
+  -- scaling out
+    high level:
+      set up shards (s1, s2, s3, etc...)
+        - split data up in shards (each shard is likely a replica set)
+      queries distributed to appropriate shards by mongos router (binary in unpacked mongodb installation)
+
+    range based approach with a shard key
+    mongos has index of what order_id ranges are in each shard (chunks)
+    if a query can be satisfied by a particular shard, it will be routed to just that shard (if the query includes the shard key)
+    without the shardkey mongos must query all shards
+    when a shardkey is declared, it becomes illegal to insert objects without the shardkey (mongodb doesnt know what shard to put it in)
+    sharding is done at the db level
+    -- can be multiple mongos' (typically run on the same server as the application) - stateless
+
+Building a Sharded Environment:
+  sharded environment with two shards (s0 and s1) - each being a replica set with 3 nodes
+  -- shards should be on different servers/computers
+  will also need some config servers (not running in a replica set) - 3x - these are mongod's
+  mongos router
+
+  figure out where to put data
+    /data/shard0 and /data/shard1
+  start a replica set and tell it that it is going to be a shard
+    mongod --replSet s0 --logpath "s0-r0.log" --dbpath /data/shard0/rs0 --port 37017 --fork --shardsvr
+    ...
+    # connect to one server and initiate the set
+    mongo --port 37017 << 'EOF'
+    config = { _id = "s0", members : [
+        { _id : 0, host : "JimMacBookAir.local:37017" },
+        { _id : 1, host : "JimMacBookAir.local:37018" },
+        { _id : 2, host : "JimMacBookAir.local:37019" }
+    ] };
+    rs.initiate(config);
+    EOF
+
+    #repeat for shard1 (s1)
+    ...
+
+    #start config servers
+    mongod --logpath "cfg-a.log" --dbpath /data/config/config-a --port 57017 --fork --configsvr
+    ...
+
+    #start mongos on standard port
+    #tell it where the config servers are
+    mongos --logpath "mongos-1.log" --config Andrews-iMac.local:57017,Andrews-iMac.local:57018,Andrews-iMac.local:57019 --fork
+
+    #add shards and enable sharding on the test db
+    mongo <<'EOF'
+    db.adminCommand( { addShard : "s0/Andrews-iMac.local:37017" } );
+    db.adminCommand( { addShard : "s1/Andrews-iMac.local:47017" } );
+    db.adminCommand( { enableSharding : "test" } );
+    db.adminCommand( { shardCollection : "test.grades", key : { student_id : 1 } } );
+    EOF
+
+    #ensure that there is an index on the shardkey
+
+    #see the mongo instances running
+    ps -ef | grep mongod
+
+    #connect us to the mongos sharded environemnt
+    mongo
+    #details about our sharded environment
+    sh.status()
+    db.grades.stats() #returns information about both shards and the number of documents on each shard
+    using .explain() with a query tells us which shard(s) were needed to return the query and how efficient it was
+
+Implications of sharding:
+  every document must include shardkey
+  shardkey is immutable
+  need an index that starts with the shardkey -- cannot be a multikey index
+  shardkey has to be specified or multi for updates
+  no shardkey means scatter gather operation (goes to all nodes)
+  no unique index unless also part of the shardkey (or starts with the shardkey)
+    -- no way to enforce the uniqueness of an index between the shards without the shardkey
+
+Sharding and replication:
+  almost always done together
+    shards are replica sets because otherwise the wouldnt be reliable
+    mongos is maintaining connections (similar to how the driver was previously). when there are issues connecting to a primary in a shard, the mongos handles reconnecting
+    write concern is passed from the driver to the mongos and are reflected (passed through) to the final write
+    usually mongos is replicated itself (lightweight)
+
+Choosing a shard key:
+  determines the performance available from a sharded environment
+  1. sufficient cardinality
+  2. avoid hotspotting and writes
+      (occurs for anything monotonically increasing [timestamps for example]) - inserts hammer one shard with occasional rebalancing (big issue with frequent writes)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<end>
